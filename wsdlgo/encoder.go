@@ -1081,9 +1081,12 @@ func (ge *goEncoder) writeGoTypes(w io.Writer, d *wsdl.Definitions) error {
 			continue
 		}
 		if st.Restriction != nil {
-			ge.writeComments(&b, stname, "")
-			fmt.Fprintf(&b, "type %s %s\n\n", stname, ge.wsdl2goType(st.Restriction.Base))
-			ge.genValidator(&b, stname, st.Restriction)
+			// Don't create custom type for enums
+			if len(st.Restriction.Enum) == 0 {
+				ge.writeComments(&b, stname, "")
+				fmt.Fprintf(&b, "type %s %s\n\n", stname, ge.wsdl2goType(st.Restriction.Base))
+			}
+			//ge.genValidator(&b, stname, st.Restriction)
 		} else if st.Union != nil {
 			types := strings.Split(st.Union.MemberTypes, " ")
 			ntypes := make([]string, len(types))
@@ -1538,6 +1541,7 @@ func (ge *goEncoder) genElements(w io.Writer, ct *wsdl.ComplexType) error {
 }
 
 func (ge *goEncoder) genElementField(w io.Writer, el *wsdl.Element) {
+
 	if el.Ref != "" {
 		ref := trimns(el.Ref)
 		nel, ok := ge.elements[ref]
@@ -1546,6 +1550,7 @@ func (ge *goEncoder) genElementField(w io.Writer, el *wsdl.Element) {
 		}
 		el = nel
 	}
+
 	var slicetype string
 	if el.Type == "" && el.ComplexType != nil {
 		seq := el.ComplexType.Sequence
@@ -1575,6 +1580,7 @@ func (ge *goEncoder) genElementField(w io.Writer, el *wsdl.Element) {
 		}
 	}
 	et := el.Type
+
 	if et == "" {
 		et = "string"
 	}
@@ -1586,7 +1592,23 @@ func (ge *goEncoder) genElementField(w io.Writer, el *wsdl.Element) {
 			tag = el.Name + ">" + slicetype
 		}
 	}
+
 	typ := ge.wsdl2goType(et)
+	if !strings.Contains(et, "xs:") {
+
+		// remove the tns: part to get the type name
+		sName := et[strings.Index(et, ":")+1:]
+		// Lookup in the simple type our type
+		simpleType := ge.stypes[sName]
+
+		// If the type is an enum, output it as an int
+		if simpleType != nil {
+			if (simpleType.Restriction != nil && len(simpleType.Restriction.Enum) > 0) || simpleType.Restriction == nil {
+				typ = "int"
+			}
+		}
+	}
+
 	if el.Nillable || el.Min == 0 {
 		tag += ",omitempty"
 		//since we add omitempty tag, we should add pointer to type.
@@ -1606,7 +1628,6 @@ func (ge *goEncoder) genAttributeField(w io.Writer, attr *wsdl.Attribute) {
 	if attr.Type == "" {
 		attr.Type = "string"
 	}
-
 	tag := fmt.Sprintf("%s,attr", attr.Name)
 	fmt.Fprintf(w, "%s ", goSymbol(attr.Name))
 	typ := ge.wsdl2goType(attr.Type)
