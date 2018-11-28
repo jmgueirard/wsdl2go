@@ -1021,11 +1021,10 @@ func (ge *goEncoder) wsdl2goType(t string) string {
 	case "datetime":
 		ge.needsDateTimeType = true
 		return "DateTime"
-	case "duration":
-		ge.needsDurationType = true
-		return "Duration"
 	case "anysequence", "anytype", "anysimpletype":
 		return "interface{}"
+	case "short", "duration":
+		return "int16"
 	default:
 		return "*" + goSymbol(v)
 	}
@@ -1078,6 +1077,9 @@ func (ge *goEncoder) writeGoTypes(w io.Writer, d *wsdl.Definitions) error {
 	for _, name := range ge.sortedSimpleTypes() {
 		st := ge.stypes[name]
 		stname := goSymbol(st.Name)
+		if strings.ToLower(stname) == "duration" {
+			continue
+		}
 		if st.Restriction != nil {
 			ge.writeComments(&b, stname, "")
 			fmt.Fprintf(&b, "type %s %s\n\n", stname, ge.wsdl2goType(st.Restriction.Base))
